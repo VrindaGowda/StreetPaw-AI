@@ -332,6 +332,10 @@ def create_dog_profile(
         existing_code_cnt += 1
         public_code = f"PAW-{existing_code_cnt:04d}"
 
+    species = data.get("species", "Dog")
+    if species and species.lower() != "dog":
+        raise HTTPException(status_code=400, detail="The Dog Registry accepts canine records only.")
+
     lat = float(data.get("location_lat", 12.9081))
     lng = float(data.get("location_lng", 77.5653))
 
@@ -342,7 +346,7 @@ def create_dog_profile(
         sex=data.get("sex", "unknown"),
         approx_age=data.get("approx_age", "Unknown"),
         colour_markings=data.get("colour_markings", "Tan & White"),
-        species=data.get("species", "Dog"),
+        species="Dog",
         breed=data.get("breed", "Indian Pariah / Desi"),
         breed_source=data.get("breed_source", "human"),
         temperament=data.get("temperament", "Friendly / Alert"),
@@ -350,6 +354,7 @@ def create_dog_profile(
         ear_notch=data.get("ear_notch", False),
         health_status=data.get("status") or data.get("health_status") or "Healthy / Sterilized",
         disease_name=data.get("health") or data.get("disease_name") or "Normal",
+        disease_confidence=float(data.get("disease_confidence", 0.0)),
         status=data.get("status_code", "active_care"),
         location=data.get("location", "DSU Main Campus Gate 2, Bengaluru"),
         location_lat=lat,
@@ -386,19 +391,23 @@ def create_dog_profile(
         entity_type="dog",
         entity_id=str(new_dog.public_code),
         before=None,
-        after={"animal_id": new_dog.animal_id, "public_code": new_dog.public_code, "breed": new_dog.breed, "created_by": current_user.id}
+        after={"animal_id": new_dog.animal_id, "public_code": new_dog.public_code, "breed": new_dog.breed, "breed_source": new_dog.breed_source, "created_by": current_user.id}
     )
 
     return {
         "message": "Dog profile created successfully",
         "animal_id": new_dog.animal_id,
         "public_code": new_dog.public_code,
+        "breed": new_dog.breed,
+        "breed_source": new_dog.breed_source,
+        "disease_name": new_dog.disease_name,
         "dog": {
             "id": new_dog.id,
             "animal_id": new_dog.animal_id,
             "public_code": new_dog.public_code,
             "name": new_dog.name,
             "breed": new_dog.breed,
+            "breed_source": new_dog.breed_source,
             "status": new_dog.health_status,
             "health": new_dog.disease_name,
             "location": new_dog.location,

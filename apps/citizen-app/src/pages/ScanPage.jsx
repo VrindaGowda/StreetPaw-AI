@@ -8,6 +8,7 @@ import { Card, Button, Badge, Skeleton, Modal, Input } from '@streetpaw/ui';
 import { PawBurstContainer } from '../components/PawBurst';
 import { PawlyMascot } from '../components/PawlyMascot';
 import { CameraModal } from '../components/CameraModal';
+import { CreateDogStepperModal } from '../components/CreateDogStepperModal';
 import { useAuth } from '../context/AuthContext';
 
 export function ScanPage({ setActivePage }) {
@@ -32,9 +33,6 @@ export function ScanPage({ setActivePage }) {
 
   // HITL Save Modal
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
-  const [saveBreed, setSaveBreed] = useState('Indian Pariah / Desi');
-  const [saveLocation, setSaveLocation] = useState('DSU Campus Gate 2, Bengaluru');
-  const [saveStatus, setSaveStatus] = useState('Healthy / Sterilized');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Handle Photo Select / Drag & Drop
@@ -162,50 +160,37 @@ export function ScanPage({ setActivePage }) {
   };
 
   // Extracted values from cached detection
-  const species = cachedDetection?.species || 'Dog';
-  const isDog = species.toLowerCase().includes('dog');
-  const confidence = cachedDetection?.confidence || 96.8;
-  const breed = cachedDetection?.breed === 'Indian breed' ? 'Indian Pariah / Indie' : (cachedDetection?.breed || 'Indian Pariah / Indie');
-  const breedConf = cachedDetection?.breed_confidence || 94.2;
-  const disease = cachedDetection?.disease || 'Normal / No visible disease';
-  const diseaseConf = cachedDetection?.disease_confidence || 98.5;
-  const diseaseStatus = cachedDetection?.disease_status || 'normal';
+  const species = cachedDetection?.species || '';
+  const isDog = Boolean(species && species.toLowerCase() === 'dog');
+  const confidence = cachedDetection?.confidence ?? 0;
+  const breed = isDog
+    ? (cachedDetection?.breed === 'Indian breed' ? 'Indian Pariah / Indie' : (cachedDetection?.breed || 'Indian Pariah / Indie'))
+    : 'Not applicable';
+  const breedConf = isDog ? (cachedDetection?.breed_confidence ?? 0) : 0;
+  const disease = isDog ? (cachedDetection?.disease || 'Normal / No visible disease') : 'Not analyzed by dog disease model';
+  const diseaseConf = isDog ? (cachedDetection?.disease_confidence ?? 0) : 0;
+  const diseaseStatus = isDog ? (cachedDetection?.disease_status || 'normal') : 'not_applicable';
 
-  // Save to Dog Registry Submission (Calls POST /api/dogs)
-  const handleSaveToRegistry = async (e) => {
-    e.preventDefault();
-    if (!user) {
-      setIsSaveModalOpen(false);
-      if (setActivePage) setActivePage('login');
-      return;
-    }
-
-    const animalId = `DOG-${Math.floor(1000 + Math.random() * 9000)}`;
-    const payload = {
-      animal_id: animalId,
-      species: 'Dog',
-      breed: saveBreed,
-      status: saveStatus,
-      health: disease,
-      location: saveLocation,
-      image_url: previewUrl || 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400&auto=format&fit=crop',
-    };
-
-    try {
-      await fetch('http://localhost:8000/api/dogs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      });
-      setSaveSuccess(true);
-      setIsSaveModalOpen(false);
-    } catch (err) {
-      console.error('Save to registry error:', err);
-    }
-  };
+  // Current scan prefill payload for Dog Registry
+  const currentScanData = (cachedDetection && isDog) ? {
+    image_url: cachedDetection.roi_crop || previewUrl,
+    image: cachedDetection.roi_crop || previewUrl,
+    previewUrl: previewUrl,
+    species: 'Dog',
+    breed: cachedDetection.breed === 'Indian breed'
+      ? 'Indian Pariah / Desi'
+      : (cachedDetection.breed || 'Indian Pariah / Desi'),
+    breed_confidence: cachedDetection.breed_confidence || 0,
+    disease: cachedDetection.disease || 'Normal',
+    disease_confidence: cachedDetection.disease_confidence || 0,
+    disease_status: cachedDetection.disease_status || 'normal',
+    status: (cachedDetection.disease_status === 'disease_detected')
+      ? 'Under Medical Care'
+      : 'Healthy / Sterilized',
+    health_status: (cachedDetection.disease_status === 'disease_detected')
+      ? 'Under Medical Care'
+      : 'Healthy / Sterilized',
+  } : null;
 
   // Download PDF Report Helper
   const handleDownloadPdf = () => {
@@ -317,31 +302,31 @@ export function ScanPage({ setActivePage }) {
                   }} />
                 )}
 
-                {/* Drawn Detection Bounding Box on Photo (Labelled just "Dog") */}
-                {step1Done && isDog && (
+                {/* Drawn Detection Bounding Box on Photo */}
+                {step1Done && species && (
                   <div style={{
                     position: 'absolute',
                     top: '15%',
                     left: '20%',
                     width: '60%',
                     height: '65%',
-                    border: '3px solid #22c55e',
+                    border: `3px solid ${isDog ? '#22c55e' : '#f59e0b'}`,
                     borderRadius: '8px',
-                    boxShadow: '0 0 15px rgba(34, 197, 94, 0.5)',
+                    boxShadow: `0 0 15px ${isDog ? 'rgba(34, 197, 94, 0.5)' : 'rgba(245, 158, 11, 0.5)'}`,
                     pointerEvents: 'none'
                   }}>
                     <span style={{
                       position: 'absolute',
                       top: '-26px',
                       left: '-3px',
-                      background: '#22c55e',
+                      background: isDog ? '#22c55e' : '#f59e0b',
                       color: '#ffffff',
                       fontSize: '0.75rem',
                       fontWeight: 800,
                       padding: '2px 10px',
                       borderRadius: '4px'
                     }}>
-                      Dog
+                      {species}
                     </span>
                   </div>
                 )}
@@ -443,7 +428,7 @@ export function ScanPage({ setActivePage }) {
               <button
                 onClick={handleStep2}
                 disabled={!step1Done || !isDog || isAnalyzing}
-                title={!step1Done ? 'Find out what animal it is first' : !isDog ? 'StreetPaw currently helps dogs only' : ''}
+                title={!step1Done ? 'Find out what animal it is first' : !isDog ? `Dog-specific analysis (Not applicable for ${species || 'non-dog'})` : ''}
                 style={{
                   width: '100%',
                   padding: '18px 24px',
@@ -474,7 +459,7 @@ export function ScanPage({ setActivePage }) {
                   <div style={{ textAlign: 'left' }}>
                     <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>2. What breed is it?</div>
                     <div style={{ fontSize: '0.775rem', opacity: 0.9 }}>
-                      {!step1Done ? 'Find out what animal it is first' : 'EfficientNet-B3 Breed Neural Classifier'}
+                      {!step1Done ? 'Find out what animal it is first' : !isDog ? `Locked — Not applicable for ${species}` : 'EfficientNet-B3 Breed Neural Classifier'}
                     </div>
                   </div>
                 </div>
@@ -493,7 +478,7 @@ export function ScanPage({ setActivePage }) {
               <button
                 onClick={handleStep3}
                 disabled={!step1Done || !isDog || isAnalyzing}
-                title={!step1Done ? 'Find out what animal it is first' : !isDog ? 'StreetPaw currently helps dogs only' : ''}
+                title={!step1Done ? 'Find out what animal it is first' : !isDog ? `Dog-specific analysis (Not applicable for ${species || 'non-dog'})` : ''}
                 style={{
                   width: '100%',
                   padding: '18px 24px',
@@ -524,7 +509,7 @@ export function ScanPage({ setActivePage }) {
                   <div style={{ textAlign: 'left' }}>
                     <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>3. Any health concern?</div>
                     <div style={{ fontSize: '0.775rem', opacity: 0.9 }}>
-                      {!step1Done ? 'Find out what animal it is first' : 'Skin Disease & Infection Risk Profiling'}
+                      {!step1Done ? 'Find out what animal it is first' : !isDog ? `Locked — Not applicable for ${species}` : 'Skin Disease & Infection Risk Profiling'}
                     </div>
                   </div>
                 </div>
@@ -592,12 +577,17 @@ export function ScanPage({ setActivePage }) {
                 </div>
               ) : (
                 <div>
-                  <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#f87171', marginBottom: '8px' }}>
-                    This looks like a {species}.
+                  <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f59e0b', marginBottom: '8px' }}>
+                    {species} Detected ({confidence}%)
                   </h3>
-                  <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0 }}>
-                    StreetPaw currently helps stray dogs only. Please upload a clear photo of a dog to run breed and disease classification.
-                  </p>
+                  <div style={{ height: '6px', width: '100%', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden', marginBottom: '12px' }}>
+                    <div style={{ height: '100%', width: `${Math.min(confidence, 100)}%`, background: '#f59e0b' }} />
+                  </div>
+                  <div style={{ padding: '12px 16px', background: 'rgba(15, 23, 42, 0.7)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', marginBottom: '8px' }}>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0 }}>
+                      StreetPaw's breed classification and skin disease profiling models are specialized for stray canines. Breed and disease analyses are locked and not applicable for {species}.
+                    </p>
+                  </div>
                 </div>
               )}
             </Card>
@@ -619,8 +609,15 @@ export function ScanPage({ setActivePage }) {
 
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
                 <span style={{ fontSize: '0.775rem', color: 'var(--text-muted)', alignSelf: 'center' }}>Secondary possibilities:</span>
-                <Badge variant="normal">🥈 Doberman (2.3%)</Badge>
-                <Badge variant="normal">🥉 German Shepherd (2.0%)</Badge>
+                {cachedDetection?.breed_top3 && cachedDetection.breed_top3.length > 1 ? (
+                  cachedDetection.breed_top3.slice(1).map((item, idx) => (
+                    <Badge key={idx} variant="normal">
+                      {idx === 0 ? '🥈' : '🥉'} {item.breed} ({typeof item.confidence === 'number' ? item.confidence.toFixed(1) : item.confidence}%)
+                    </Badge>
+                  ))
+                ) : (
+                  <Badge variant="normal">None detected</Badge>
+                )}
               </div>
             </Card>
           )}
@@ -700,7 +697,19 @@ export function ScanPage({ setActivePage }) {
                 >
                   Ask Pawly about this scan
                 </Button>
-                <Button variant="emerald" size="sm" icon={Plus} onClick={() => setIsSaveModalOpen(true)}>
+                <Button
+                  variant="emerald"
+                  size="sm"
+                  icon={Plus}
+                  disabled={!isDog}
+                  onClick={() => {
+                    if (!user) {
+                      if (setActivePage) setActivePage('login');
+                      return;
+                    }
+                    setIsSaveModalOpen(true);
+                  }}
+                >
                   Save to Dog Registry
                 </Button>
                 <Button variant="primary" size="sm" icon={AlertCircle} onClick={() => setActivePage && setActivePage('distress')}>
@@ -716,36 +725,17 @@ export function ScanPage({ setActivePage }) {
         </div>
       </div>
 
-      {/* HITL SAVE TO REGISTRY MODAL */}
+      {/* 4-Step Registration Stepper Modal with Scan-Specific Prefilled Data */}
       {isSaveModalOpen && (
-        <Modal isOpen={isSaveModalOpen} onClose={() => setIsSaveModalOpen(false)} title="Register Stray Dog into Database">
-          <form onSubmit={handleSaveToRegistry} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
-              {previewUrl && <img src={previewUrl} alt="Preview" style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover' }} />}
-              <div>
-                <Badge variant="brand">AI SCAN PREFILLED</Badge>
-                <div style={{ fontWeight: 800, marginTop: '4px' }}>{breed}</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status: {disease}</div>
-              </div>
-            </div>
-
-            <Input label="Breed Classification" value={saveBreed} onChange={(e) => setSaveBreed(e.target.value)} required />
-            <Input label="Sighting Location / Landmark" value={saveLocation} onChange={(e) => setSaveLocation(e.target.value)} required />
-
-            <div>
-              <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px', display: 'block' }}>Health & Vaccination Status</label>
-              <select value={saveStatus} onChange={(e) => setSaveStatus(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--bg-input)', color: '#fff' }}>
-                <option value="Healthy / Sterilized">Healthy / Sterilized</option>
-                <option value="Under Medical Care">Under Medical Care</option>
-                <option value="Vaccinated">Vaccinated</option>
-              </select>
-            </div>
-
-            <Button variant="emerald" type="submit" size="lg">
-              Confirm & Register into Database
-            </Button>
-          </form>
-        </Modal>
+        <CreateDogStepperModal
+          isOpen={isSaveModalOpen}
+          onClose={() => setIsSaveModalOpen(false)}
+          prefilledData={currentScanData}
+          onSuccess={(code) => {
+            setSaveSuccess(true);
+            setIsSaveModalOpen(false);
+          }}
+        />
       )}
 
       {/* CAMERA MODAL */}

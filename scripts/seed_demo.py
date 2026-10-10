@@ -87,91 +87,76 @@ def seed_demo_data():
             ("Cantonment Railway Station", 12.9935, 77.5984),
         ]
 
-        dog_breeds = [
-            "Indian Pariah / Desi", "Street Mongrel", "Indie Pariah Mix", "Tabby Mix",
-            "Indian Hound Mix", "Desi Shepherd Cross", "Indie Short-hair", "Labrador Cross"
-        ]
-        photos = [
-            "https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1537151625747-768eb6cf92b2?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1561037404-61cd46aa615b?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1548767797-d8c844163c4c?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1552053831-71594a27632d?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1534361960057-19889db9621e?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1517849845537-4d257902454a?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1598133894008-61f7fdb8cc3a?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1518717758536-85ae29035b6d?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1507146426996-ef05306b995a?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1520087619230-ce89772969f8?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1530281700549-e82e7bf110d6?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1558788353-f76d92427f16?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1535930891776-0c2dfb7fda1a?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1560807707-8cc77767d783?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1514984879728-be0aff75a6e8?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1576201836106-db1758fd1c97?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1546182990-dffeafbe841d?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1510771463146-e89e6e86560e?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1568640347023-a616a30bc3bd?w=400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1541364983171-a8ba01e95cfc?w=400&auto=format&fit=crop",
-        ]
+        from update_registry_data import CURATED_DOGS
+        photos = [item["image_url"] for item in CURATED_DOGS]
 
         created_dogs = []
-        for i in range(1, 26):
-            public_code = f"PAW-{i:04d}"
-            animal_id = f"DOG-{1000 + i}"
-            area_name, lat, lng = bengaluru_areas[i - 1]
-            breed_name = dog_breeds[i % len(dog_breeds)]
-            photo_url = photos[(i - 1) % len(photos)]
-
+        for i, item in enumerate(CURATED_DOGS, 1):
+            public_code = item["public_code"]
             existing_dog = db.query(Dog).filter(Dog.public_code == public_code).first()
             if not existing_dog:
                 d = Dog(
-                    public_code=public_code,
-                    animal_id=animal_id,
-                    name=f"Stray {public_code}",
-                    sex="male" if i % 2 == 0 else "female",
-                    approx_age=f"{1 + (i % 5)} years",
-                    colour_markings="Tan & White chest patch" if i % 2 == 0 else "Brown brindle Coat",
+                    public_code=item["public_code"],
+                    animal_id=item["animal_id"],
+                    name=item["name"],
+                    sex=item["sex"],
+                    approx_age=item["approx_age"],
+                    colour_markings=item["colour_markings"],
                     species="Dog",
-                    breed=breed_name,
-                    breed_source="ai" if i % 3 == 0 else "human",
-                    temperament="Friendly / Community Fed" if i % 2 == 0 else "Timid / Alert",
-                    sterilised="yes" if i % 2 == 0 else "no",
-                    ear_notch=True if i % 2 == 0 else False,
-                    health_status="Healthy / Sterilized" if i % 2 == 0 else "Under Medical Care",
-                    disease_name="Normal" if i % 2 == 0 else "Dermatitis Treated",
-                    disease_confidence=98.5 if i % 2 == 0 else 85.0,
-                    status="active_care",
-                    primary_photo=photo_url,
-                    image_url=photo_url,
-                    location=f"{area_name}, Bengaluru",
-                    location_lat=lat,
-                    location_lng=lng,
-                    created_at=datetime.datetime.utcnow() - datetime.timedelta(days=i)
+                    breed=item["breed"],
+                    breed_source=item["breed_source"],
+                    temperament=item["temperament"],
+                    sterilised=item["sterilised"],
+                    ear_notch=item["ear_notch"],
+                    health_status=item["health_status"],
+                    disease_name=item["disease_name"],
+                    disease_confidence=item["disease_confidence"],
+                    status=item["status"],
+                    primary_photo=item["image_url"],
+                    image_url=item["image_url"],
+                    location=item["location"],
+                    location_lat=item["location_lat"],
+                    location_lng=item["location_lng"],
+                    created_at=datetime.datetime.utcnow() - datetime.timedelta(days=item["days_ago"])
                 )
                 db.add(d)
                 db.commit()
                 db.refresh(d)
                 created_dogs.append(d)
             else:
+                existing_dog.name = item["name"]
+                existing_dog.breed = item["breed"]
+                existing_dog.breed_source = item["breed_source"]
+                existing_dog.sex = item["sex"]
+                existing_dog.approx_age = item["approx_age"]
+                existing_dog.colour_markings = item["colour_markings"]
+                existing_dog.temperament = item["temperament"]
+                existing_dog.sterilised = item["sterilised"]
+                existing_dog.ear_notch = item["ear_notch"]
+                existing_dog.health_status = item["health_status"]
+                existing_dog.disease_name = item["disease_name"]
+                existing_dog.disease_confidence = item["disease_confidence"]
+                existing_dog.status = item["status"]
+                existing_dog.primary_photo = item["image_url"]
+                existing_dog.image_url = item["image_url"]
+                existing_dog.location = item["location"]
+                existing_dog.location_lat = item["location_lat"]
+                existing_dog.location_lng = item["location_lng"]
+                db.commit()
                 created_dogs.append(existing_dog)
 
-        print(f"[DEMO SEED] Successfully created/verified {len(created_dogs)} dogs.")
+        print(f"[DEMO SEED] Successfully created/verified {len(created_dogs)} curated dogs.")
 
         # 4. Vaccinations for Dogs
-        for idx, d in enumerate(created_dogs[:15]):
+        for idx, (d, item) in enumerate(zip(created_dogs, CURATED_DOGS)):
             v_exist = db.query(Vaccination).filter(Vaccination.dog_id == d.id).first()
-            if not v_exist:
+            if not v_exist and item.get("vaccinated"):
                 vac = Vaccination(
                     dog_id=d.id,
-                    vaccine="rabies" if idx % 2 == 0 else "DHPP",
-                    date_given=datetime.datetime.utcnow() - datetime.timedelta(days=30 * (idx + 1)),
-                    next_due=datetime.datetime.utcnow() + datetime.timedelta(days=365 - (30 * (idx + 1))),
-                    given_by="BBMP Drive Unit #3",
+                    vaccine=item.get("vac_type", "Rabies ARV"),
+                    date_given=datetime.datetime.utcnow() - datetime.timedelta(days=item["days_ago"]),
+                    next_due=datetime.datetime.utcnow() + datetime.timedelta(days=365 - item["days_ago"]),
+                    given_by="BBMP Animal Welfare Unit #3",
                     notes="Anti-Rabies Drive Tagged"
                 )
                 db.add(vac)

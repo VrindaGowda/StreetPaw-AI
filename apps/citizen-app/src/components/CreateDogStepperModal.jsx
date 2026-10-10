@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Input, Card, Badge } from '@streetpaw/ui';
-import { Camera, MapPin, CheckCircle2, AlertTriangle, ArrowRight, ArrowLeft, Sparkles, RefreshCw, Upload, ShieldCheck, Heart } from 'lucide-react';
+import { Camera, MapPin, CheckCircle2, AlertTriangle, ArrowRight, ArrowLeft, Sparkles, RefreshCw, ShieldCheck, Heart } from 'lucide-react';
 import { LocationPicker } from './LocationPicker';
 import { PawBurstContainer } from './PawBurst';
 import { useAuth } from '../context/AuthContext';
@@ -10,9 +10,13 @@ export function CreateDogStepperModal({ isOpen, onClose, onSuccess, prefilledDat
   const [currentStep, setCurrentStep] = useState(1);
 
   // Form State
-  const [photoUrl, setPhotoUrl] = useState(prefilledData?.image_url || prefilledData?.image || '');
+  const [photoUrl, setPhotoUrl] = useState('');
   const [name, setName] = useState('');
-  const [breed, setBreed] = useState(prefilledData?.breed || 'Indian Pariah / Desi');
+  const [breed, setBreed] = useState('Indian Pariah / Desi');
+  const [originalAiBreed, setOriginalAiBreed] = useState('');
+  const [breedConfidence, setBreedConfidence] = useState(0);
+  const [diseaseName, setDiseaseName] = useState('Normal');
+  const [diseaseConfidence, setDiseaseConfidence] = useState(0);
   const [sex, setSex] = useState('unknown');
   const [approxAge, setApproxAge] = useState('2 years');
   const [colourMarkings, setColourMarkings] = useState('Tan & White chest patch');
@@ -39,17 +43,45 @@ export function CreateDogStepperModal({ isOpen, onClose, onSuccess, prefilledDat
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
 
+  // Synchronize state from prefilledData every time modal opens or scan data updates
   useEffect(() => {
-    if (prefilledData) {
-      if (prefilledData.image_url) setPhotoUrl(prefilledData.image_url);
-      if (prefilledData.breed) setBreed(prefilledData.breed);
-      if (prefilledData.status) setStatus(prefilledData.status);
-    }
-  }, [prefilledData]);
+    if (isOpen) {
+      setCurrentStep(1);
+      setShowCelebration(false);
+      setDuplicateResult(null);
+      setSelectedCandidate(null);
+      setName('');
 
-  // Step 4: Run Duplicate Check when entering Review step
-  const handleProceedToStep4 = async () => {
-    setCurrentStep(4);
+      if (prefilledData) {
+        const incomingPhoto = prefilledData.image_url || prefilledData.image || prefilledData.previewUrl || '';
+        const incomingBreed = prefilledData.breed || 'Indian Pariah / Desi';
+        const incomingStatus = prefilledData.status || prefilledData.health_status || 'Healthy / Sterilized';
+        const incomingDisease = prefilledData.disease || 'Normal';
+        const incomingBreedConf = prefilledData.breed_confidence || 0;
+        const incomingDiseaseConf = prefilledData.disease_confidence || 0;
+
+        setPhotoUrl(incomingPhoto);
+        setBreed(incomingBreed);
+        setOriginalAiBreed(prefilledData.breed || '');
+        setBreedConfidence(incomingBreedConf);
+        setDiseaseName(incomingDisease);
+        setDiseaseConfidence(incomingDiseaseConf);
+        setStatus(incomingStatus);
+      } else {
+        setPhotoUrl('');
+        setBreed('Indian Pariah / Desi');
+        setOriginalAiBreed('');
+        setBreedConfidence(0);
+        setDiseaseName('Normal');
+        setDiseaseConfidence(0);
+        setStatus('Healthy / Sterilized');
+      }
+    }
+  }, [isOpen, prefilledData]);
+
+  // Step 3: Run Duplicate Check when entering Review step
+  const handleProceedToStep3 = async () => {
+    setCurrentStep(3);
     setIsCheckingDuplicate(true);
     setDuplicateResult(null);
 
@@ -84,7 +116,7 @@ export function CreateDogStepperModal({ isOpen, onClose, onSuccess, prefilledDat
     }
     setIsSubmitting(true);
     try {
-      await fetch(`http://localhost:8000/api/dogs/${candidate.public_code || candidate.animal_id}/locations`, {
+      const res = await fetch(`http://localhost:8000/api/dogs/${candidate.public_code || candidate.animal_id}/locations`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -101,13 +133,22 @@ export function CreateDogStepperModal({ isOpen, onClose, onSuccess, prefilledDat
         })
       });
 
+      if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error('Your login session has expired. Please log in again.');
+        }
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Failed to link sighting');
+      }
+
       setShowCelebration(true);
       setTimeout(() => {
-        onSuccess(candidate.public_code || candidate.animal_id);
-        onClose();
+        if (onSuccess) onSuccess(candidate.public_code || candidate.animal_id);
+        if (onClose) onClose();
       }, 1200);
     } catch (err) {
       console.error(err);
+      alert(`Linking sighting failed: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -121,6 +162,13 @@ export function CreateDogStepperModal({ isOpen, onClose, onSuccess, prefilledDat
     }
     setIsSubmitting(true);
     try {
+      // Determine if breed was modified by the human or retained from AI prediction
+      const isAiBreed = Boolean(
+        originalAiBreed &&
+        breed.trim().toLowerCase() === originalAiBreed.trim().toLowerCase()
+      );
+      const computedBreedSource = isAiBreed ? 'ai' : 'human';
+
       const res = await fetch('http://localhost:8000/api/dogs/', {
         method: 'POST',
         headers: {
@@ -128,8 +176,10 @@ export function CreateDogStepperModal({ isOpen, onClose, onSuccess, prefilledDat
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          name,
-          breed,
+          name: name ? name.trim() : undefined,
+          species: 'Dog',
+          breed: breed.trim() || 'Indian Pariah / Desi',
+          breed_source: computedBreedSource,
           sex,
           approx_age: approxAge,
           colour_markings: colourMarkings,
@@ -137,82 +187,96 @@ export function CreateDogStepperModal({ isOpen, onClose, onSuccess, prefilledDat
           ear_notch: earNotch,
           status,
           health_status: status,
+          disease_name: diseaseName || 'Normal',
+          disease_confidence: parseFloat(diseaseConfidence || 0),
           image_url: photoUrl || 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400&auto=format&fit=crop',
-          location: locationData.address,
+          location: locationData.address || 'Bengaluru',
           location_lat: locationData.lat,
           location_lng: locationData.lng,
-          area: locationData.area,
-          city: locationData.city,
-          state: locationData.state
+          area: locationData.area || locationData.address,
+          city: locationData.city || 'Bengaluru',
+          state: locationData.state || 'Karnataka'
         })
       });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error('Your login session has expired. Please log in again.');
+        }
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Failed to register dog');
+      }
+
       const data = await res.json();
       setShowCelebration(true);
       setTimeout(() => {
-        onSuccess(data.public_code);
-        onClose();
+        if (onSuccess) onSuccess(data.public_code || data.animal_id);
+        if (onClose) onClose();
       }, 1200);
     } catch (err) {
-      console.error(err);
+      console.error('Registration error:', err);
+      alert(`Registration failed: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const isBreedAiRetained = Boolean(
+    originalAiBreed &&
+    breed.trim().toLowerCase() === originalAiBreed.trim().toLowerCase()
+  );
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Register Stray Animal ID (4-Step Guided Flow)" maxWidth="640px">
+    <Modal isOpen={isOpen} onClose={onClose} title="Register Stray Dog ID" maxWidth="640px">
       <div className="stepper-modal-container">
         {/* Step Indicator Bar */}
         <div className="stepper-indicator-bar">
-          <div className={`step-dot ${currentStep >= 1 ? 'active' : ''}`}>1. Photo</div>
+          <div className={`step-dot ${currentStep >= 1 ? 'active' : ''}`}>1. Details</div>
           <div className="step-line" />
-          <div className={`step-dot ${currentStep >= 2 ? 'active' : ''}`}>2. Details</div>
+          <div className={`step-dot ${currentStep >= 2 ? 'active' : ''}`}>2. Location</div>
           <div className="step-line" />
-          <div className={`step-dot ${currentStep >= 3 ? 'active' : ''}`}>3. Location</div>
-          <div className="step-line" />
-          <div className={`step-dot ${currentStep >= 4 ? 'active' : ''}`}>4. Review</div>
+          <div className={`step-dot ${currentStep >= 3 ? 'active' : ''}`}>3. Review</div>
         </div>
 
-        {/* STEP 1: PHOTO */}
+        {/* STEP 1: DETAILS (WITH PHOTO) */}
         {currentStep === 1 && (
           <div className="step-content">
-            <h4 className="step-heading">Step 1: Upload or Confirm Photo</h4>
-            <p className="step-sub">Provide a clear picture of the stray animal for Re-ID visual embedding.</p>
+            <h4 className="step-heading">Step 1: Animal Details & Identification</h4>
+            <p className="step-sub">Review physical characteristics and sterilization tags. You can edit any field before registering.</p>
 
-            <div className="photo-preview-box">
-              {photoUrl ? (
-                <img src={photoUrl} alt="Stray preview" className="stepper-photo-img" />
-              ) : (
-                <div className="empty-photo-dropzone">
-                  <Camera size={40} color="var(--primary-coral)" />
-                  <span>No photo attached yet</span>
+            {/* Photo preview attached with details - No raw URLs */}
+            {photoUrl ? (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+                padding: '12px 16px',
+                background: 'rgba(15, 23, 42, 0.7)',
+                borderRadius: 'var(--radius-lg, 12px)',
+                border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))'
+              }}>
+                <img
+                  src={photoUrl}
+                  alt="Stray preview"
+                  style={{
+                    width: '84px',
+                    height: '84px',
+                    borderRadius: '10px',
+                    objectFit: 'cover',
+                    border: '2px solid var(--primary-coral, #ff7e67)',
+                    flexShrink: 0
+                  }}
+                />
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#ffffff' }}>
+                    Stray Dog Photo
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted, #94a3b8)', marginTop: '2px' }}>
+                    Biometric image linked to this animal record for Re-ID visual recognition.
+                  </div>
                 </div>
-              )}
-            </div>
-
-            <div className="input-group">
-              <label className="field-label">Photo Image URL</label>
-              <Input
-                value={photoUrl}
-                onChange={(e) => setPhotoUrl(e.target.value)}
-                placeholder="https://images.unsplash.com/... or paste image URL"
-              />
-            </div>
-
-            <div className="stepper-actions">
-              <Button variant="ghost" onClick={onClose}>Cancel</Button>
-              <Button variant="emerald" icon={ArrowRight} onClick={() => setCurrentStep(2)}>
-                Next: Animal Details
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 2: DETAILS */}
-        {currentStep === 2 && (
-          <div className="step-content">
-            <h4 className="step-heading">Step 2: Breed, Markings & Health Status</h4>
-            <p className="step-sub">Fill physical characteristics and sterilization tags.</p>
+              </div>
+            ) : null}
 
             <div className="form-grid-2">
               <div>
@@ -221,14 +285,49 @@ export function CreateDogStepperModal({ isOpen, onClose, onSuccess, prefilledDat
               </div>
 
               <div>
-                <label className="field-label">Breed Classification</label>
-                <select className="custom-select" value={breed} onChange={(e) => setBreed(e.target.value)}>
-                  <option value="Indian Pariah / Desi">Indian Pariah / Desi</option>
-                  <option value="Street Mongrel">Street Mongrel</option>
-                  <option value="Indie Pariah Mix">Indie Pariah Mix</option>
-                  <option value="Labrador Cross">Labrador Cross</option>
-                  <option value="Indian Hound Mix">Indian Hound Mix</option>
-                </select>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label className="field-label" style={{ margin: 0 }}>Breed Classification</label>
+                  {originalAiBreed ? (
+                    isBreedAiRetained ? (
+                      <Badge variant="brand">
+                        🤖 AI PREDICTED {breedConfidence > 0 ? `(${Math.round(breedConfidence)}%)` : ''}
+                      </Badge>
+                    ) : (
+                      <Badge variant="uncertain">
+                        ✏️ USER EDITED (Human Choice)
+                      </Badge>
+                    )
+                  ) : (
+                    <Badge variant="normal">
+                      👤 MANUAL ENTRY
+                    </Badge>
+                  )}
+                </div>
+                <Input
+                  list="breed-options-list"
+                  value={breed}
+                  onChange={(e) => setBreed(e.target.value)}
+                  placeholder="e.g. Indian Pariah / Desi, Beagle, Pug, Labrador..."
+                  required
+                />
+                <datalist id="breed-options-list">
+                  <option value="Indian Pariah / Desi" />
+                  <option value="Street Mongrel" />
+                  <option value="Indie Pariah Mix" />
+                  <option value="Beagle" />
+                  <option value="Boxer" />
+                  <option value="Bulldog" />
+                  <option value="Dachshund" />
+                  <option value="German Shepherd" />
+                  <option value="Golden Retriever" />
+                  <option value="Labrador Retriever" />
+                  <option value="Pomeranian" />
+                  <option value="Poodle" />
+                  <option value="Pug" />
+                  <option value="Rottweiler" />
+                  <option value="Siberian Husky" />
+                  <option value="Indian Hound Mix" />
+                </datalist>
               </div>
 
               <div>
@@ -266,21 +365,38 @@ export function CreateDogStepperModal({ isOpen, onClose, onSuccess, prefilledDat
                   <option value="no">No Notch Visible</option>
                 </select>
               </div>
+
+              <div className="col-span-2">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label className="field-label" style={{ margin: 0 }}>Health & Vaccination Status</label>
+                  {diseaseName && diseaseName !== 'Normal' && (
+                    <Badge variant="critical">
+                      🚨 AI Flagged: {diseaseName} {diseaseConfidence > 0 ? `(${Math.round(diseaseConfidence)}%)` : ''}
+                    </Badge>
+                  )}
+                </div>
+                <select className="custom-select" value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="Healthy / Sterilized">Healthy / Sterilized</option>
+                  <option value="Under Medical Care">Under Medical Care</option>
+                  <option value="Vaccinated">Vaccinated</option>
+                  <option value="Needs Attention">Needs Attention</option>
+                </select>
+              </div>
             </div>
 
             <div className="stepper-actions mt-4">
-              <Button variant="secondary" icon={ArrowLeft} onClick={() => setCurrentStep(1)}>Back</Button>
-              <Button variant="emerald" icon={ArrowRight} onClick={() => setCurrentStep(3)}>
+              <Button variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button variant="emerald" icon={ArrowRight} onClick={() => setCurrentStep(2)}>
                 Next: Set Location
               </Button>
             </div>
           </div>
         )}
 
-        {/* STEP 3: LOCATION */}
-        {currentStep === 3 && (
+        {/* STEP 2: LOCATION */}
+        {currentStep === 2 && (
           <div className="step-content">
-            <h4 className="step-heading">Step 3: Sighting Location</h4>
+            <h4 className="step-heading">Step 2: Sighting Location</h4>
             <p className="step-sub">Use GPS, search address, or drop a pin on the map.</p>
 
             <LocationPicker
@@ -294,18 +410,18 @@ export function CreateDogStepperModal({ isOpen, onClose, onSuccess, prefilledDat
               }}
               onSelectLocation={(loc) => {
                 setLocationData(loc);
-                handleProceedToStep4();
+                handleProceedToStep3();
               }}
-              onCancel={() => setCurrentStep(2)}
+              onCancel={() => setCurrentStep(1)}
               confirmLabel="Next: Review & Duplicate Check"
             />
           </div>
         )}
 
-        {/* STEP 4: REVIEW & DUPLICATE CHECK */}
-        {currentStep === 4 && (
+        {/* STEP 3: REVIEW & DUPLICATE CHECK */}
+        {currentStep === 3 && (
           <div className="step-content">
-            <h4 className="step-heading">Step 4: Human-in-the-Loop Duplicate Verification</h4>
+            <h4 className="step-heading">Step 3: Human-in-the-Loop Duplicate Verification</h4>
 
             {isCheckingDuplicate ? (
               <div className="checking-duplicate-spinner">
@@ -367,17 +483,37 @@ export function CreateDogStepperModal({ isOpen, onClose, onSuccess, prefilledDat
                     <p className="text-muted text-sm mt-1">
                       {breed} • {locationData.address}
                     </p>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px', lineHeight: '1.5' }}>
+                      <span>Classification Source: </span>
+                      {isBreedAiRetained ? (
+                        <span style={{ color: '#60a5fa', fontWeight: 600 }}>🤖 AI Predicted ({Math.round(breedConfidence)}%)</span>
+                      ) : (
+                        <span style={{ color: '#facc15', fontWeight: 600 }}>✏️ User Edited (Human Verified)</span>
+                      )}
+                      {diseaseName && diseaseName !== 'Normal' && (
+                        <div>Health Note: <span style={{ color: '#f87171', fontWeight: 600 }}>{diseaseName}</span></div>
+                      )}
+                    </div>
 
-                    <Button
-                      variant="emerald"
-                      icon={Sparkles}
-                      size="lg"
-                      className="mt-4"
-                      loading={isSubmitting}
-                      onClick={handleRegisterNewDog}
-                    >
-                      Register into Database
-                    </Button>
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                      <Button
+                        variant="secondary"
+                        icon={ArrowLeft}
+                        onClick={() => setCurrentStep(2)}
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        variant="emerald"
+                        icon={Sparkles}
+                        size="lg"
+                        style={{ flex: 1 }}
+                        loading={isSubmitting}
+                        onClick={handleRegisterNewDog}
+                      >
+                        Register into Database
+                      </Button>
+                    </div>
                   </Card>
                 )}
               </div>

@@ -21,3 +21,12 @@ datasets/
 *.jpg
 *.png
 *.jpeg
+
+# Python virtual environments
+.venv/
+**/.venv/
+
+# Local database files
+*.db
+*.sqlite
+*.sqlite3

@@ -50,7 +50,7 @@ def run_seed():
                 DogProfile(
                     animal_id="DOG-3310",
                     species="Dog",
-                    breed="Tabby Mix",
+                    breed="Indian Hound Mix",
                     health_status="Vaccinated",
                     disease_name="Normal",
                     location="Koramangala 4th Block",

@@ -13,7 +13,7 @@ from db.models import User, Organisation
 
 SECRET_KEY = os.getenv("JWT_SECRET", "streetpaw-secret-jwt-key-2026-super-secure")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 15
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 security = HTTPBearer(auto_error=False)
